@@ -1,0 +1,4 @@
+<resources>
+    <string name="app_name">Game AutoPlay</string>
+    <string name="a11y_desc">يسمح للتطبيق بتنفيذ اللمسات والسحب داخل لعبتك الأوف لاين أثناء اللعب التلقائي.</string>
+</resources>
