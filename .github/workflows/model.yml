@@ -1,0 +1,45 @@
+name: Export stand-in model
+on:
+  workflow_dispatch:
+permissions:
+  contents: write
+jobs:
+  export:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Install
+        run: |
+          python -m pip install -U pip wheel
+          pip install ultralytics onnx onnxruntime
+      - name: Export
+        run: |
+          set +e
+          python tools/export_model.py 2>&1 | tee export.log
+          exit 0
+      - name: Push log branch
+        if: always()
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set +e
+          rm -rf /tmp/lg && mkdir /tmp/lg && cp export.log /tmp/lg/
+          cd /tmp/lg
+          git init -q -b model-logs
+          git add -A
+          git -c user.email=ci@local -c user.name=ci commit -qm "export log run ${{ github.run_number }}"
+          git push -q --force "https://x-access-token:${GH_TOKEN}@github.com/${{ github.repository }}.git" model-logs
+          exit 0
+      - name: Publish release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          cd out
+          FILES=$(ls *.tflite *.onnx 2>/dev/null)
+          test -n "$FILES" || { echo "no model files produced"; exit 1; }
+          gh release delete model-coco --yes --cleanup-tag 2>/dev/null || true
+          gh release create model-coco $FILES --title "Stand-in model: YOLO11n (COCO)" --notes "Official Ultralytics YOLO11n trained on COCO, exported at 640x640. Class 0 = person. Stand-in detector for pipeline tests only; replace with a model trained on your own game."
