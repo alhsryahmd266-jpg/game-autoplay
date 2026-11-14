@@ -20,6 +20,16 @@ jobs:
         run: |
           set +e
           python tools/export_model.py 2>&1 | tee export.log
+          if [ -z "$(find out -name '*.tflite' 2>/dev/null)" ]; then
+            echo "=== second pass (requirements were auto-installed in pass 1) ===" | tee -a export.log
+            python tools/export_model.py 2>&1 | tee -a export.log
+          fi
+          for p in com/google/ai/edge/litert/litert org/tensorflow/tensorflow-lite com/microsoft/onnxruntime/onnxruntime-android; do
+            echo "== maven central $p" | tee -a export.log
+            curl -sS "https://repo1.maven.org/maven2/$p/maven-metadata.xml" | grep -E "<latest>|<release>" | tee -a export.log
+            echo "== google maven $p" | tee -a export.log
+            curl -sS "https://maven.google.com/$p/maven-metadata.xml" | grep -E "<latest>|<release>" | tee -a export.log
+          done
           exit 0
       - name: Push log branch
         if: always()
@@ -39,7 +49,7 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           cd out
-          FILES=$(ls *.tflite *.onnx 2>/dev/null)
+          FILES=$(ls *.tflite *.onnx 2>/dev/null || true)
           test -n "$FILES" || { echo "no model files produced"; exit 1; }
           gh release delete model-coco --yes --cleanup-tag 2>/dev/null || true
           gh release create model-coco $FILES --title "Stand-in model: YOLO11n (COCO)" --notes "Official Ultralytics YOLO11n trained on COCO, exported at 640x640. Class 0 = person. Stand-in detector for pipeline tests only; replace with a model trained on your own game."

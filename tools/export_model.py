@@ -24,17 +24,24 @@ try:
 except Exception:
     traceback.print_exc()
 
-pairs = [
-    ("yolo11n_saved_model/yolo11n_float16.tflite", "yolo11n-coco-f16.tflite"),
-    ("yolo11n_saved_model/yolo11n_float32.tflite", "yolo11n-coco-f32.tflite"),
-    ("yolo11n.onnx", "yolo11n-coco.onnx"),
-]
-for src, dst in pairs:
-    if os.path.exists(src):
-        shutil.copy(src, dst)
-        log("ready", dst, os.path.getsize(dst))
+import glob
+found = glob.glob("**/*.tflite", recursive=True)
+log("tflite files found:", found)
+for f in found:
+    low = f.lower()
+    if "yolo11n-coco" in low:
+        continue
+    if "float16" in low:
+        dst = "yolo11n-coco-f16.tflite"
+    elif "float32" in low:
+        dst = "yolo11n-coco-f32.tflite"
     else:
-        log("missing", src)
+        dst = "yolo11n-coco.tflite"
+    shutil.copy(f, dst)
+    log("ready", dst, os.path.getsize(dst))
+if os.path.exists("yolo11n.onnx"):
+    shutil.copy("yolo11n.onnx", "yolo11n-coco.onnx")
+    log("ready yolo11n-coco.onnx", os.path.getsize("yolo11n-coco.onnx"))
 
 # ---- sanity checks (also tells us the real output layout of the exported model) ----
 try:
@@ -43,7 +50,7 @@ try:
 except Exception as e:
     log("bus.jpg download failed:", e)
 
-for f in ["yolo11n-coco-f16.tflite", "yolo11n-coco.onnx"]:
+for f in sorted(glob.glob("yolo11n-coco*.tflite")) + ["yolo11n-coco.onnx"]:
     if os.path.exists(f) and os.path.exists("bus.jpg"):
         try:
             r = YOLO(f, task="detect")("bus.jpg", imgsz=640, verbose=False)[0]
@@ -59,7 +66,8 @@ try:
     except Exception:
         import tensorflow as tf
         Interpreter = tf.lite.Interpreter
-    it = Interpreter(model_path="yolo11n-coco-f16.tflite")
+    tf_path = sorted(glob.glob("yolo11n-coco*.tflite"))[0]
+    it = Interpreter(model_path=tf_path)
     it.allocate_tensors()
     i, o = it.get_input_details()[0], it.get_output_details()[0]
     log("tflite input", i["shape"].tolist(), i["dtype"].__name__, "output", o["shape"].tolist(), o["dtype"].__name__)
