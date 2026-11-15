@@ -42,7 +42,7 @@ class TfliteEngine(model: ByteArray, threads: Int, gpu: Boolean) : Engine {
     private var gpuDelegate: GpuDelegate? = null
     override val inW: Int
     override val inH: Int
-    override val nhwc: Boolean = true
+    override val nhwc: Boolean
     override var tag: String = "TFLite"
     override val metaNames: List<String> = emptyList()
     override val outShapeStatic: IntArray
@@ -75,14 +75,17 @@ class TfliteEngine(model: ByteArray, threads: Int, gpu: Boolean) : Engine {
             ip = Interpreter(mb, o)
             tag = "TFLite CPU x" + threads
         }
-        interp = ip ?: throw IllegalStateException("tflite")
+        interp = ip!!
         val it0 = interp.getInputTensor(0)
         val s = it0.shape()
-        if (s.size != 4 || s[3] != 3) throw IllegalArgumentException("شكل الدخل غير مدعوم: " + s.joinToString("x"))
+        val chLast = s.size == 4 && s[3] == 3
+        val chFirst = s.size == 4 && s[1] == 3
+        if (!chLast && !chFirst) throw IllegalArgumentException("شكل الدخل غير مدعوم: " + s.joinToString("x"))
+        nhwc = chLast
         if (it0.dataType() != DataType.FLOAT32) throw IllegalArgumentException("النموذج int8 غير مدعوم، صدّره float16 أو float32")
         if (interp.outputTensorCount != 1) throw IllegalArgumentException("النموذج فيه أكتر من خرج، غير مدعوم")
-        inH = s[1]
-        inW = s[2]
+        inH = if (chLast) s[1] else s[2]
+        inW = if (chLast) s[2] else s[3]
         val ot = interp.getOutputTensor(0)
         if (ot.dataType() != DataType.FLOAT32) throw IllegalArgumentException("خرج النموذج مش float32")
         outShapeStatic = ot.shape()

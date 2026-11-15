@@ -1,0 +1,36 @@
+name: Check tflite on TF 2.16 runtime
+on:
+  workflow_dispatch:
+permissions:
+  contents: write
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Install TF 2.16
+        run: |
+          python -m venv /tmp/v
+          /tmp/v/bin/pip install -q "tensorflow-cpu==2.16.2" pillow
+      - name: Run check
+        run: |
+          set +e
+          /tmp/v/bin/python tools/check_tflite.py "https://github.com/${{ github.repository }}/releases/download/model-coco/yolo11n-coco.tflite" 2>&1 | tee check.log
+          exit 0
+      - name: Push log branch
+        if: always()
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set +e
+          rm -rf /tmp/lg && mkdir /tmp/lg && cp check.log /tmp/lg/
+          cd /tmp/lg
+          git init -q -b check-logs
+          git add -A
+          git -c user.email=ci@local -c user.name=ci commit -qm "check log"
+          git push -q --force "https://x-access-token:${GH_TOKEN}@github.com/${{ github.repository }}.git" check-logs
+          exit 0

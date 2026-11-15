@@ -63,7 +63,7 @@ jobs:
           APK=$(find app/build/outputs/apk/release -name '*.apk' | head -1)
           N="AutoPlay-2.0.${{ github.run_number }}.apk"
           cp "$APK" "$N"
-          gh release create "v2.0.${{ github.run_number }}" "$N" --title "AutoPlay 2.0.${{ github.run_number }}" --notes "AutoPlay Ω build ${{ github.run_number }}. Signed with the project's stable key, so it installs over the previous build."
+          gh release create "v2.0.${{ github.run_number }}" "$N" --latest=false --title "AutoPlay 2.0.${{ github.run_number }}" --notes "AutoPlay Ω build ${{ github.run_number }}. Signed with the project's stable key, so it installs over the previous build."
           gh release delete latest --yes --cleanup-tag 2>/dev/null || true
           cp "$APK" AutoPlay.apk
-          gh release create latest AutoPlay.apk --title "AutoPlay (latest)" --notes "Latest build: v2.0.${{ github.run_number }}"
+          gh release create latest AutoPlay.apk --latest --title "AutoPlay (latest)" --notes "Latest build: v2.0.${{ github.run_number }}"

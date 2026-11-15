@@ -17,7 +17,7 @@
 
 ## بناء النسخ
 كل push على `main` بيبني APK موقّع بمفتاح ثابت (فبتتركّب فوق القديمة) وبينزّله في Releases:
-`https://github.com/alhsryahmd266-jpg/game-autoplay/releases/latest/download/AutoPlay.apk`
+`https://github.com/alhsryahmd266-jpg/game-autoplay/releases/download/latest/AutoPlay.apk`
 
 ## نموذج تجريبي
 Release باسم `model-coco`: نموذج YOLO11n الرسمي (COCO) بيكشف "person" كبديل مؤقت لحد ما يخلص نموذجك.

@@ -52,4 +52,4 @@ jobs:
           FILES=$(ls *.tflite *.onnx 2>/dev/null || true)
           test -n "$FILES" || { echo "no model files produced"; exit 1; }
           gh release delete model-coco --yes --cleanup-tag 2>/dev/null || true
-          gh release create model-coco $FILES --title "Stand-in model: YOLO11n (COCO)" --notes "Official Ultralytics YOLO11n trained on COCO, exported at 640x640. Class 0 = person. Stand-in detector for pipeline tests only; replace with a model trained on your own game."
+          gh release create model-coco $FILES --latest=false --title "Stand-in model: YOLO11n (COCO)" --notes "Official Ultralytics YOLO11n trained on COCO, exported at 640x640. Class 0 = person. Stand-in detector for pipeline tests only; replace with a model trained on your own game."
