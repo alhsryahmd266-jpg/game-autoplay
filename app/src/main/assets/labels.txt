@@ -1,9 +1,0 @@
-enemy
-weapon
-medkit
-low_health
-zone_edge
-joystick
-fire
-heal
-jump

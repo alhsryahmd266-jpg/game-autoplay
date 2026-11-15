@@ -1,9 +1,23 @@
-# Game AutoPlay
-Android app that plays **your own offline game** through a floating ▶/■ button.
-Screen capture (MediaProjection) → on-device TFLite detector → rule-based Brain → AccessibilityService gestures. No root, no injection, no external services.
+# AutoPlay Ω
 
-## Use your trained model
-Put `model.tflite` (YOLOv8, input 320) and `labels.txt` (one class per line) in `app/src/main/assets/`, then push — GitHub Actions rebuilds the APK.
-Labels the Brain understands: `enemy, weapon, medkit, low_health, zone_edge` and UI controls `joystick, fire, heal, jump` (auto-calibration).
-Export: `yolo export model=best.pt format=tflite imgsz=320`
-Without a model the app just patrols (moves forward and sweeps the camera).
+بوت أندرويد يلعب **لعبتك الأوفلاين** بدالك: بيشوف الشاشة مباشرة (التقاط شاشة محلي) ويكشف الأعداء والأزرار بنموذج YOLO (`.tflite` أو `.onnx`)، وبيتحكم باللمس بالطريقتين:
+
+- **خدمة إمكانية الوصول**: بتشتغل على أي موبايل.
+- **الشل المدمج** (اختياري، أدق وأسرع): بيتصل بـ Wireless debugging بتاع الموبايل نفسه، بتفعّله مرة واحدة بكود من 6 أرقام من الإشعار. من غير أي برنامج خارجي.
+
+## الاستخدام
+1. ثبّت الـ APK وافتحه، وفعّل: الظهور فوق التطبيقات + خدمة إمكانية الوصول.
+2. اختار لعبتك (التطبيق بيرفض ألعاب الأونلاين المعروفة).
+3. استورد النموذج (`.tflite` / `.onnx`) من التنزيلات، وأسماء الكلاسات (`data.yaml` أو zip الداتا) لو مش مضمّنة.
+4. اضغط "تشغيل العوّامة"، افتح لعبتك، واضغط زر ▶ العايم. اضغطه تاني (أو زر خفض الصوت) يوقف.
+
+## الأزرار
+- لو النموذج فيه كلاسات للأزرار (joystick, fire, jump...) هيتعرف عليها أوتوماتيك. شوف `docs/CLASSES_AR.md`.
+- غير كده: من "ضبط مواضع الأزرار" حدد مكان كل زر على لقطة من لعبتك مرة واحدة.
+
+## بناء النسخ
+كل push على `main` بيبني APK موقّع بمفتاح ثابت (فبتتركّب فوق القديمة) وبينزّله في Releases:
+`https://github.com/alhsryahmd266-jpg/game-autoplay/releases/latest/download/AutoPlay.apk`
+
+## نموذج تجريبي
+Release باسم `model-coco`: نموذج YOLO11n الرسمي (COCO) بيكشف "person" كبديل مؤقت لحد ما يخلص نموذجك.

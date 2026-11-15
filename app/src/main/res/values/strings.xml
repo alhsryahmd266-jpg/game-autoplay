@@ -1,4 +1,4 @@
 <resources>
-    <string name="app_name">Game AutoPlay</string>
-    <string name="a11y_desc">يسمح للتطبيق بتنفيذ اللمسات والسحب داخل لعبتك الأوف لاين أثناء اللعب التلقائي.</string>
+    <string name="app_name">AutoPlay Ω</string>
+    <string name="a11y_desc">يسمح للتطبيق بلمس شاشة لعبتك (حركة، تصويب، نار) وبمعرفة أي تطبيق في المقدمة عشان ما يتحركش إلا جوه لعبتك. لا يقرأ محتوى الشاشة ولا يرسل أي بيانات.</string>
 </resources>

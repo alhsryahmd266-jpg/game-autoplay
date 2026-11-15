@@ -1,26 +1,69 @@
-name: Build APK
+name: Build AutoPlay APK
 on:
+  push:
+    branches: [main]
+    paths-ignore:
+      - '**.md'
+      - 'docs/**'
+      - 'tools/**'
+      - '.github/workflows/model.yml'
   workflow_dispatch:
+concurrency:
+  group: autoplay-build
+  cancel-in-progress: true
 permissions:
   contents: write
 jobs:
   build:
     runs-on: ubuntu-latest
+    timeout-minutes: 40
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-java@v4
         with:
           distribution: temurin
-          java-version: 17
-      - run: yes | "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" --licenses > /dev/null || true
+          java-version: '17'
       - uses: gradle/actions/setup-gradle@v4
         with:
-          gradle-version: 8.9
-      - run: gradle assembleDebug --no-daemon --stacktrace
-      - run: cp app/build/outputs/apk/debug/app-debug.apk game-autoplay.apk
-      - uses: softprops/action-gh-release@v2
-        with:
-          tag_name: latest
-          name: Latest APK
-          files: game-autoplay.apk
-          make_latest: true
+          gradle-version: '8.9'
+      - name: Signing key
+        env:
+          KS: ${{ secrets.AUTOPLAY_KEYSTORE_B64 }}
+        run: |
+          if [ -n "$KS" ]; then echo "$KS" | base64 -d > app/autoplay.p12; echo "stable signing key installed"; else echo "no stable key: debug signing"; fi
+      - name: Build
+        run: |
+          set +e
+          gradle :app:assembleRelease --no-daemon --stacktrace --console=plain -Pvn=2.0.${{ github.run_number }} -Pvc=$((200 + ${{ github.run_number }})) 2>&1 | tee gradle.log
+          echo "GRADLE_EXIT=${PIPESTATUS[0]}" >> "$GITHUB_ENV"
+          exit 0
+      - name: Push log branch
+        if: always()
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set +e
+          rm -rf /tmp/lg && mkdir /tmp/lg && cp gradle.log /tmp/lg/
+          grep -E "^e: |error:|What went wrong|FAILURE|Execution failed|Could not" -A3 gradle.log | head -150 > /tmp/lg/errors.txt
+          cd /tmp/lg
+          git init -q -b autoplay-logs
+          git add -A
+          git -c user.email=ci@local -c user.name=ci commit -qm "build log run ${{ github.run_number }}"
+          git push -q --force "https://x-access-token:${GH_TOKEN}@github.com/${{ github.repository }}.git" autoplay-logs
+          exit 0
+      - name: Fail when Gradle failed
+        if: env.GRADLE_EXIT != '0'
+        run: |
+          grep -E "^e: " gradle.log | head -30 | while IFS= read -r l; do echo "::error::${l}"; done
+          exit 1
+      - name: Release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          APK=$(find app/build/outputs/apk/release -name '*.apk' | head -1)
+          N="AutoPlay-2.0.${{ github.run_number }}.apk"
+          cp "$APK" "$N"
+          gh release create "v2.0.${{ github.run_number }}" "$N" --title "AutoPlay 2.0.${{ github.run_number }}" --notes "AutoPlay Ω build ${{ github.run_number }}. Signed with the project's stable key, so it installs over the previous build."
+          gh release delete latest --yes --cleanup-tag 2>/dev/null || true
+          cp "$APK" AutoPlay.apk
+          gh release create latest AutoPlay.apk --title "AutoPlay (latest)" --notes "Latest build: v2.0.${{ github.run_number }}"
