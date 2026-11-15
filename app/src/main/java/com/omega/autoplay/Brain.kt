@@ -83,6 +83,16 @@ class Brain(private val layout: Layout) {
             return c
         }
 
+        if (w.calibrating) {
+            c.status = "معايرة: بتعلّم شكل شخصيتك"
+            c.moveY = 0.7f
+            if (canLook) {
+                c.lookDx = (if ((t / 600L) % 2L == 0L) 1f else -1f) * 0.05f * sw
+                lastLook = t
+            }
+            return c
+        }
+
         val tgt = pickTarget(w)
         val hp = w.health
         if (tgt != null) {

@@ -118,7 +118,8 @@ class World(
     val menu: Det?,
     val hudVisible: Boolean,
     val motion: Float,
-    val cross: PointF
+    val cross: PointF,
+    val calibrating: Boolean = false
 )
 
 /** Where the on-screen controls are (normalized 0..1 of the landscape screen). */

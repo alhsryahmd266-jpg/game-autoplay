@@ -57,19 +57,103 @@ object Hud {
     }
 }
 
+/**
+ * In third-person games the detector often labels the player's own avatar as an enemy. During a short calibration
+ * (the bot walks and sweeps the camera without aiming) anything that stays fixed on the screen is the avatar, and is
+ * ignored afterwards. Real enemies move across the screen while the camera moves, so they never become "self".
+ */
+class SelfFilter {
+    private class Cand(var x1: Float, var y1: Float, var x2: Float, var y2: Float, var n: Int)
+
+    private val cands = ArrayList<Cand>()
+    private val boxes = ArrayList<FloatArray>()
+    private var frames = 0
+    var learning = false
+        private set
+    val count: Int get() = boxes.size
+
+    fun begin() {
+        cands.clear()
+        boxes.clear()
+        frames = 0
+        learning = true
+    }
+
+    private fun iouOf(ax1: Float, ay1: Float, ax2: Float, ay2: Float, bx1: Float, by1: Float, bx2: Float, by2: Float): Float {
+        val ix = max(0f, min(ax2, bx2) - max(ax1, bx1))
+        val iy = max(0f, min(ay2, by2) - max(ay1, by1))
+        val inter = ix * iy
+        val u = (ax2 - ax1) * (ay2 - ay1) + (bx2 - bx1) * (by2 - by1) - inter
+        return if (u <= 0f) 0f else inter / u
+    }
+
+    fun feed(dets: List<Det>) {
+        frames++
+        for (d in dets) {
+            if (d.role != Role.ENEMY && d.role != Role.ENEMY_HEAD) continue
+            var hit: Cand? = null
+            for (c in cands) {
+                if (iouOf(c.x1, c.y1, c.x2, c.y2, d.x1, d.y1, d.x2, d.y2) > 0.5f) {
+                    hit = c
+                    break
+                }
+            }
+            if (hit == null) {
+                cands.add(Cand(d.x1, d.y1, d.x2, d.y2, 1))
+            } else {
+                hit.n++
+                hit.x1 += (d.x1 - hit.x1) * 0.2f
+                hit.y1 += (d.y1 - hit.y1) * 0.2f
+                hit.x2 += (d.x2 - hit.x2) * 0.2f
+                hit.y2 += (d.y2 - hit.y2) * 0.2f
+            }
+        }
+    }
+
+    fun finish() {
+        learning = false
+        val need = max(8, (frames * 0.6f).toInt())
+        for (c in cands) {
+            if (c.n >= need) boxes.add(floatArrayOf(c.x1, c.y1, c.x2, c.y2))
+        }
+        cands.clear()
+        AppLog.d("self filter: " + boxes.size + " fixed box(es) learned from " + frames + " frames")
+    }
+
+    fun isSelf(d: Det): Boolean {
+        for (b in boxes) {
+            if (iouOf(b[0], b[1], b[2], b[3], d.x1, d.y1, d.x2, d.y2) > 0.35f) return true
+            val inside = d.cx >= b[0] && d.cx <= b[2] && d.cy >= b[1] && d.cy <= b[3]
+            if (inside && d.w * d.h >= 0.4f * (b[2] - b[0]) * (b[3] - b[1])) return true
+        }
+        return false
+    }
+}
+
 /** Turns raw detections + the frame into the situation the Brain reasons about. */
 class Perception(private val layout: Layout) {
     private var prev: Frame? = null
     private var hudSeenAt = 0L
+    private var calibUntil = 0L
+    private val self = SelfFilter()
     var hudKnown = false
 
     fun reset(t: Long) {
         prev = null
         hudSeenAt = t
+        calibUntil = t + 3500
+        self.begin()
     }
 
-    fun build(f: Frame, dets: List<Det>, t: Long): World {
+    fun build(f: Frame, allDets: List<Det>, t: Long): World {
         val aspect = f.w.toFloat() / f.h
+        val calibrating = t < calibUntil
+        if (calibrating) {
+            self.feed(allDets)
+        } else if (self.learning) {
+            self.finish()
+        }
+        val dets = if (calibrating) allDets else allDets.filter { !((it.role == Role.ENEMY || it.role == Role.ENEMY_HEAD) && self.isSelf(it)) }
         val enemies = dets.filter { it.role == Role.ENEMY }
         val heads = dets.filter { it.role == Role.ENEMY_HEAD }
         val allies = dets.filter { it.role == Role.ALLY }
@@ -111,7 +195,8 @@ class Perception(private val layout: Layout) {
             menu = dets.filter { it.role == Role.MENU_BUTTON }.maxByOrNull { it.conf },
             hudVisible = hudVisible,
             motion = motion,
-            cross = cross
+            cross = cross,
+            calibrating = calibrating
         )
     }
 }
