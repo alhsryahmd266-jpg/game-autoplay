@@ -14,12 +14,15 @@ import android.os.Handler
 import android.os.HandlerThread
 import android.os.IBinder
 import android.os.Looper
+import android.os.PowerManager
+import android.os.Process
 import android.os.SystemClock
 import android.view.Gravity
 import android.view.WindowManager
 import android.widget.Toast
 import java.io.File
 import kotlin.math.max
+import kotlin.math.min
 
 class BotService : Service() {
     companion object {
@@ -121,6 +124,7 @@ class BotService : Service() {
         }, main)
         status = "بحمّل النموذج..."
         Thread {
+            Process.setThreadPriority(5)
             val (y, info) = ModelStore.build(this)
             yolo = y
             perception.hudKnown = y?.hasHudClasses() ?: false
@@ -230,35 +234,57 @@ class BotService : Service() {
     }
 
     private fun loop(cap: ScreenCapture) {
+        Process.setThreadPriority(5)
+        val pm = getSystemService(Context.POWER_SERVICE) as PowerManager
         var frames = 0
         var t0 = SystemClock.uptimeMillis()
         var lastRot = 0L
+        var lastTherm = 0L
+        var hot = false
         while (runFlag) {
             val f = cap.awaitFrame(300) ?: continue
+            val tStart = SystemClock.uptimeMillis()
             try {
-                val t = SystemClock.uptimeMillis()
-                if (t - lastRot > 700) {
-                    lastRot = t
+                if (tStart - lastRot > 700) {
+                    lastRot = tStart
                     if (cap.checkRotation()) controller.setScreen(cap.realW, cap.realH)
                 }
                 val y = yolo
                 val dets = if (y != null) y.detect(f, Prefs.conf, 0.45f) else emptyList()
-                val w = perception.build(f, dets, t)
+                val w = perception.build(f, dets, tStart)
                 val c = brain.decide(w, cap.realW, cap.realH)
                 controller.apply(c)
                 debugView?.dets = dets
                 frames++
-                if (t - t0 >= 1000) {
+                if (tStart - t0 >= 1000) {
                     val st = if (controller.paused) "اللعبة مش قدامك" else c.status
-                    val txt = "$frames fps · " + (y?.lastMs?.toInt() ?: 0) + "ms · " + st
+                    val txt = "$frames fps · " + (y?.lastMs?.toInt() ?: 0) + "ms · " + st + (if (hot) " · سخونة" else "")
                     overlay?.setInfo(txt)
                     status = "شغّال: $txt"
                     frames = 0
-                    t0 = t
+                    t0 = tStart
                 }
             } catch (e: Throwable) {
                 AppLog.d("loop: " + e.javaClass.simpleName + " " + e.message)
                 try { Thread.sleep(60) } catch (_: InterruptedException) { }
+            }
+            if (tStart - lastTherm > 2000) {
+                lastTherm = tStart
+                if (Build.VERSION.SDK_INT >= 29) {
+                    val ts = pm.currentThermalStatus
+                    hot = ts >= PowerManager.THERMAL_STATUS_SEVERE
+                    if (ts >= PowerManager.THERMAL_STATUS_CRITICAL) {
+                        toast("حرارة الموبايل عالية جدًا، وقفت البوت حماية له")
+                        main.post { stopBot() }
+                    }
+                }
+            }
+            // frame pacing: never run faster than the cap (less heat, more CPU left for the game)
+            val fpsCap = if (hot) min(Prefs.maxFps, 6) else Prefs.maxFps
+            val minPeriod = 1000L / max(1, fpsCap)
+            val spent = SystemClock.uptimeMillis() - tStart
+            if (spent < minPeriod) {
+                try { Thread.sleep(minPeriod - spent) } catch (_: InterruptedException) { }
             }
         }
     }

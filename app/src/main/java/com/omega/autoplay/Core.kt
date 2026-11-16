@@ -78,10 +78,19 @@ object Prefs {
         get() = sp.getFloat("conf", 0.35f)
         set(v) = putF("conf", v)
     var aimGain: Float
-        get() = sp.getFloat("aim", 0.5f)
+        get() = sp.getFloat("aim", 0.6f)
         set(v) = putF("aim", v)
+    var maxFps: Int
+        get() = sp.getInt("maxfps", 12)
+        set(v) = putI("maxfps", v)
+    var calKx: Float
+        get() = sp.getFloat("calkx", 0f)
+        set(v) = putF("calkx", v)
+    var calKy: Float
+        get() = sp.getFloat("calky", 0f)
+        set(v) = putF("calky", v)
     var threads: Int
-        get() = sp.getInt("threads", 4)
+        get() = sp.getInt("threads", 3)
         set(v) = putI("threads", v)
     var style: Int
         get() = sp.getInt("style", 1)

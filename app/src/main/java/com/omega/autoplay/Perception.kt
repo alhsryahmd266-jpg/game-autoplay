@@ -141,7 +141,7 @@ class Perception(private val layout: Layout) {
     fun reset(t: Long) {
         prev = null
         hudSeenAt = t
-        calibUntil = t + 3500
+        calibUntil = t + 4500
         self.begin()
     }
 
@@ -179,6 +179,9 @@ class Perception(private val layout: Layout) {
         val cr = dets.filter { it.role == Role.CROSSHAIR }.maxByOrNull { it.conf }
         val cross = if (cr != null) PointF(cr.cx, cr.cy) else PointF(layout.cross.x, layout.cross.y)
         val motion = Hud.motion(prev, f)
+        val pf = prev
+        val ego = if (pf != null) Ego.estimate(pf, f) else null
+        val egoOk = ego != null && ego.quality > 0.15f
         prev = f
         return World(
             t = t,
@@ -196,6 +199,10 @@ class Perception(private val layout: Layout) {
             hudVisible = hudVisible,
             motion = motion,
             cross = cross,
+            frame = f,
+            egoDx = if (ego != null) ego.dx else 0f,
+            egoDy = if (ego != null) ego.dy else 0f,
+            egoOk = egoOk,
             calibrating = calibrating
         )
     }

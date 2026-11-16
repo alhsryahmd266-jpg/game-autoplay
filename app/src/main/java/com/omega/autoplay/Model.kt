@@ -96,6 +96,8 @@ class Command {
     var lookDx = 0f
     var lookDy = 0f
     var fire = false
+    /** true when the look drag was computed from the measured sensitivity (do not apply the invert-Y setting on top) */
+    var absoluteLook = false
     val taps = ArrayList<PointF>()
     var status = ""
     fun tap(p: PointF?) {
@@ -119,6 +121,10 @@ class World(
     val hudVisible: Boolean,
     val motion: Float,
     val cross: PointF,
+    val frame: Frame,
+    val egoDx: Float,
+    val egoDy: Float,
+    val egoOk: Boolean,
     val calibrating: Boolean = false
 )
 

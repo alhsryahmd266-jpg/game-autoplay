@@ -128,6 +128,7 @@ class MainActivity : Activity() {
         seekRow(c6, "حساسية الكشف", 10, 80, (Prefs.conf * 100).toInt(), { "$it%" }) { Prefs.conf = it / 100f }
         seekRow(c6, "قوة التصويب", 10, 100, (Prefs.aimGain * 100).toInt(), { "$it%" }) { Prefs.aimGain = it / 100f }
         seekRow(c6, "عدد أنوية المعالج للنموذج", 1, 8, Prefs.threads, { "$it" }) { Prefs.threads = it }
+        seekRow(c6, "أقصى عدد صور في الثانية (أقل = حرارة أقل واللعبة أسلس)", 5, 25, Prefs.maxFps, { "$it" }) { Prefs.maxFps = it }
         switchRow(c6, "عكس اتجاه التصويب الرأسي", Prefs.invertY) { Prefs.invertY = it }
         switchRow(c6, "زر خفض الصوت = إيقاف طوارئ", Prefs.volStop) { Prefs.volStop = it }
         switchRow(c6, "رسم مربعات الكشف فوق اللعبة (للتجربة فقط)", Prefs.debugBoxes) { Prefs.debugBoxes = it }

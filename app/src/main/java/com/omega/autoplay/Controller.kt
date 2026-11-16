@@ -29,6 +29,7 @@ class Controller(private val layout: Layout, private val ownPkg: String) {
     private var pendDx = 0f
     private var pendDy = 0f
     private var pendLook = false
+    private var pendAbs = false
     private val tapQ = ConcurrentLinkedQueue<PointF>()
 
     private var joyDown = false
@@ -84,6 +85,7 @@ class Controller(private val layout: Layout, private val ownPkg: String) {
             synchronized(lookLock) {
                 pendDx = c.lookDx
                 pendDy = c.lookDy
+                pendAbs = c.absoluteLook
                 pendLook = true
             }
         }
@@ -173,16 +175,18 @@ class Controller(private val layout: Layout, private val ownPkg: String) {
             var dx = 0f
             var dy = 0f
             var have = false
+            var absL = false
             synchronized(lookLock) {
                 if (pendLook) {
                     dx = pendDx
                     dy = pendDy
+                    absL = pendAbs
                     pendLook = false
                     have = true
                 }
             }
             if (have) {
-                if (Prefs.invertY) dy = -dy
+                if (Prefs.invertY && !absL) dy = -dy
                 val ax = layout.look.x * w
                 val ay = layout.look.y * h
                 val hw = layout.lookHalfW * w
@@ -191,6 +195,8 @@ class Controller(private val layout: Layout, private val ownPkg: String) {
                 lx1 = (lx0 + dx).coerceIn(ax - hw, ax + hw)
                 ly0 = (ay - dy / 2f).coerceIn(ay - hh, ay + hh)
                 ly1 = (ly0 + dy).coerceIn(ay - hh, ay + hh)
+                DragLog.dx = lx1 - lx0
+                DragLog.dy = ly1 - ly0
                 b.touchDown(1, lx0, ly0)
                 lookActive = true
                 lookStep = 0
@@ -203,6 +209,8 @@ class Controller(private val layout: Layout, private val ownPkg: String) {
             if (lookStep >= steps) {
                 b.touchUp(1)
                 lookActive = false
+                DragLog.at = SystemClock.uptimeMillis()
+                DragLog.seq = DragLog.seq + 1
             }
         }
 
