@@ -1,0 +1,65 @@
+name: Export YOLO26 (COCO stand-in, tflite)
+on:
+  workflow_dispatch:
+permissions:
+  contents: write
+jobs:
+  export:
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Install
+        run: |
+          python -m pip install -U pip wheel
+          pip install -U ultralytics onnx onnxruntime onnxslim
+      - name: Export yolo26n and yolo26s
+        run: |
+          set +e
+          mkdir -p logs outall
+          pip list 2>/dev/null | grep -i -E "^(ultralytics|torch|tensorflow|onnx|ai-edge|litert)" | tee logs/export.log
+          for M in yolo26n yolo26s; do
+            rm -rf work_$M && mkdir work_$M && cd work_$M
+            python -c "from ultralytics import YOLO; YOLO('$M.pt')" 2>&1 | tail -3 | tee -a ../logs/export.log
+            python ../tools/convert_model.py $M.pt $M-coco 2>&1 | tee -a ../logs/export.log
+            if [ -z "$(ls out/$M-coco-*.tflite 2>/dev/null)" ]; then
+              echo "=== second pass (requirements were auto-installed in pass 1) ===" | tee -a ../logs/export.log
+              python ../tools/convert_model.py $M.pt $M-coco 2>&1 | tee -a ../logs/export.log
+            fi
+            cp out/$M-coco-* ../outall/ 2>/dev/null
+            cd ..
+          done
+          ls -la outall | tee -a logs/export.log
+          exit 0
+      - name: Check on TF 2.16 runtime (same family as the app)
+        run: |
+          set +e
+          python -m venv /tmp/v
+          /tmp/v/bin/pip install -q "tensorflow-cpu==2.16.2" pillow 2>&1 | tail -2
+          /tmp/v/bin/python tools/check_model.py outall/*.tflite 2>&1 | tee logs/check.log
+          exit 0
+      - name: Push log branch
+        if: always()
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set +e
+          rm -rf /tmp/lg && mkdir /tmp/lg && cp logs/* /tmp/lg/
+          cd /tmp/lg
+          git init -q -b yolo26-logs
+          git add -A
+          git -c user.email=ci@local -c user.name=ci commit -qm "yolo26 export log run ${{ github.run_number }}"
+          git push -q --force "https://x-access-token:${GH_TOKEN}@github.com/${{ github.repository }}.git" yolo26-logs
+          exit 0
+      - name: Publish release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          cd outall
+          FILES=$(ls *.tflite *.onnx *.txt 2>/dev/null || true)
+          test -n "$FILES" || { echo "no model files produced"; exit 1; }
+          gh release delete model-yolo26 --yes --cleanup-tag 2>/dev/null || true
+          gh release create model-yolo26 $FILES --latest=false --title "YOLO26 (COCO) - tflite for AutoPlay" --notes "Official Ultralytics YOLO26 n/s trained on COCO. Class 0 = person (the app reads it as enemy). *-288x640 = 20:9 landscape (fastest); *-raw = classic head (decode + NMS in the app); *-640 = square. Stand-in until the model trained on your own images is ready."
