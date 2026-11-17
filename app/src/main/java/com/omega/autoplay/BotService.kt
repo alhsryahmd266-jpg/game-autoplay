@@ -3,9 +3,11 @@ package com.omega.autoplay
 import android.app.Notification
 import android.app.PendingIntent
 import android.app.Service
+import android.content.ContentValues
 import android.content.Context
 import android.content.Intent
 import android.content.pm.ServiceInfo
+import android.graphics.Bitmap
 import android.graphics.PixelFormat
 import android.media.projection.MediaProjection
 import android.media.projection.MediaProjectionManager
@@ -14,15 +16,15 @@ import android.os.Handler
 import android.os.HandlerThread
 import android.os.IBinder
 import android.os.Looper
-import android.os.PowerManager
 import android.os.Process
 import android.os.SystemClock
+import android.provider.MediaStore
 import android.view.Gravity
 import android.view.WindowManager
 import android.widget.Toast
 import java.io.File
+import java.nio.ByteBuffer
 import kotlin.math.max
-import kotlin.math.min
 
 class BotService : Service() {
     companion object {
@@ -133,7 +135,7 @@ class BotService : Service() {
                 if (gone) return@post
                 val side = if (y != null) max(y.inW, y.inH) else 640
                 capture = ScreenCapture(this, mp, Handler(capThread.looper), side)
-                overlay = Overlay(this, { toggle() }, { snapshot() }).also { it.show() }
+                overlay = Overlay(this, { toggle() }, { toggleRecord() }).also { it.show() }
                 if (Prefs.debugBoxes) addDebug()
                 status = if (y != null) "جاهز" else "جاهز (بدون نموذج: وضع تجريبي)"
                 if (y == null) toast("مفيش نموذج: التطبيق هيمشي ويلفّ بس (وضع تجريبي)")
@@ -161,7 +163,95 @@ class BotService : Service() {
     }
 
     private fun toggle() {
-        if (runFlag) stopBot() else startBot()
+        if (recording) {
+            recording = false
+        } else if (runFlag) {
+            stopBot()
+        } else {
+            startBot()
+        }
+    }
+
+    @Volatile private var recording = false
+    private var recCount = 0
+
+    /** Long-press on the floating button: record frames of YOUR game (for labelling and training your own detector). */
+    private fun toggleRecord() {
+        if (recording) {
+            recording = false
+            return
+        }
+        if (runFlag || starting) {
+            toast("وقّف البوت الأول وبعدين سجّل")
+            return
+        }
+        val pkg = Prefs.targetPkg
+        if (pkg.isEmpty()) {
+            toast("اختار لعبتك من التطبيق الأول")
+            return
+        }
+        if (Safety.isBlocked(pkg)) {
+            toast("دي لعبة أونلاين معروفة. التسجيل للعبتك الأوفلاين بس")
+            return
+        }
+        if (Build.VERSION.SDK_INT < 29) {
+            toast("التسجيل محتاج أندرويد 10 أو أحدث")
+            return
+        }
+        val cap = capture ?: return
+        recording = true
+        recCount = 0
+        overlay?.setState(Overlay.REC)
+        cap.resume()
+        toast("بدأ تسجيل لقطات من لعبتك (لقطة كل ثانية تقريبًا). اضغط الزر العايم عشان توقف")
+        Thread({ recLoop(cap) }, "ap-rec").start()
+    }
+
+    private fun recLoop(cap: ScreenCapture) {
+        Process.setThreadPriority(5)
+        var last = 0L
+        var first = true
+        while (recording) {
+            val f = cap.awaitFrame(500) ?: continue
+            val now = SystemClock.uptimeMillis()
+            if (now - last < 900) continue
+            last = now
+            if (first) {
+                first = false
+                try { cap.saveFrame(f, File(filesDir, "frame.png")) } catch (_: Throwable) { }
+            }
+            if (saveFrameToDownloads(f)) {
+                recCount++
+                overlay?.setInfo("⏺ $recCount")
+            }
+            if (recCount >= 2000) recording = false
+        }
+        cap.pause()
+        overlay?.setState(Overlay.IDLE)
+        overlay?.setInfo("")
+        toast("وقف التسجيل: $recCount لقطة في التنزيلات ← AutoPlayFrames")
+    }
+
+    private fun saveFrameToDownloads(f: Frame): Boolean {
+        if (Build.VERSION.SDK_INT < 29) return false
+        return try {
+            val bmp = Bitmap.createBitmap(f.w, f.h, Bitmap.Config.ARGB_8888)
+            bmp.copyPixelsFromBuffer(ByteBuffer.wrap(f.px))
+            val v = ContentValues()
+            v.put(MediaStore.MediaColumns.DISPLAY_NAME, "frame_" + System.currentTimeMillis() + ".jpg")
+            v.put(MediaStore.MediaColumns.MIME_TYPE, "image/jpeg")
+            v.put(MediaStore.MediaColumns.RELATIVE_PATH, "Download/AutoPlayFrames")
+            val uri = contentResolver.insert(MediaStore.Downloads.EXTERNAL_CONTENT_URI, v)
+            var ok = false
+            if (uri != null) {
+                contentResolver.openOutputStream(uri)?.use { ok = bmp.compress(Bitmap.CompressFormat.JPEG, 92, it) }
+            }
+            bmp.recycle()
+            ok
+        } catch (t: Throwable) {
+            AppLog.d("save frame failed: " + t.message)
+            false
+        }
     }
 
     private fun startBot() {
@@ -235,12 +325,9 @@ class BotService : Service() {
 
     private fun loop(cap: ScreenCapture) {
         Process.setThreadPriority(5)
-        val pm = getSystemService(Context.POWER_SERVICE) as PowerManager
         var frames = 0
         var t0 = SystemClock.uptimeMillis()
         var lastRot = 0L
-        var lastTherm = 0L
-        var hot = false
         while (runFlag) {
             val f = cap.awaitFrame(300) ?: continue
             val tStart = SystemClock.uptimeMillis()
@@ -258,7 +345,7 @@ class BotService : Service() {
                 frames++
                 if (tStart - t0 >= 1000) {
                     val st = if (controller.paused) "اللعبة مش قدامك" else c.status
-                    val txt = "$frames fps · " + (y?.lastMs?.toInt() ?: 0) + "ms · " + st + (if (hot) " · سخونة" else "")
+                    val txt = "$frames fps · " + (y?.lastMs?.toInt() ?: 0) + "ms · " + st
                     overlay?.setInfo(txt)
                     status = "شغّال: $txt"
                     frames = 0
@@ -268,19 +355,8 @@ class BotService : Service() {
                 AppLog.d("loop: " + e.javaClass.simpleName + " " + e.message)
                 try { Thread.sleep(60) } catch (_: InterruptedException) { }
             }
-            if (tStart - lastTherm > 2000) {
-                lastTherm = tStart
-                if (Build.VERSION.SDK_INT >= 29) {
-                    val ts = pm.currentThermalStatus
-                    hot = ts >= PowerManager.THERMAL_STATUS_SEVERE
-                    if (ts >= PowerManager.THERMAL_STATUS_CRITICAL) {
-                        toast("حرارة الموبايل عالية جدًا، وقفت البوت حماية له")
-                        main.post { stopBot() }
-                    }
-                }
-            }
-            // frame pacing: never run faster than the cap (less heat, more CPU left for the game)
-            val fpsCap = if (hot) min(Prefs.maxFps, 6) else Prefs.maxFps
+            // frame pacing: optional cap set by the user (default 30 = effectively uncapped)
+            val fpsCap = Prefs.maxFps
             val minPeriod = 1000L / max(1, fpsCap)
             val spent = SystemClock.uptimeMillis() - tStart
             if (spent < minPeriod) {

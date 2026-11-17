@@ -81,7 +81,7 @@ object Prefs {
         get() = sp.getFloat("aim", 0.6f)
         set(v) = putF("aim", v)
     var maxFps: Int
-        get() = sp.getInt("maxfps", 12)
+        get() = sp.getInt("maxfps", 30)
         set(v) = putI("maxfps", v)
     var calKx: Float
         get() = sp.getFloat("calkx", 0f)

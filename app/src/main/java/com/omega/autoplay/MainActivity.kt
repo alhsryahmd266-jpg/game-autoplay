@@ -105,7 +105,7 @@ class MainActivity : Activity() {
         })
 
         val c5 = section("٥) الأزرار")
-        c5.addView(Ui.text(this, "لو النموذج مش بيتعرف على أزرار لعبتك: شغّل البوت مرة داخل اللعبة (أو اضغط الزر العايم ضغطة طويلة) عشان تتاخد لقطة، وبعدين حدد مكان كل زر عليها.", 12f, Ui.SUB))
+        c5.addView(Ui.text(this, "ضغطة طويلة على الزر العايم = بدء/إيقاف تسجيل لقطات من لعبتك (بتتحفظ في التنزيلات ← AutoPlayFrames). نفس اللقطات بتستخدمها هنا لتحديد مكان الأزرار، وبترفعها على Roboflow عشان تدرّب نموذج كشف على لعبتك.", 12f, Ui.SUB))
         c5.addView(Ui.button(this, "ضبط مواضع الأزرار على لقطة من لعبتك") { startActivity(Intent(this, LayoutActivity::class.java)) })
         c5.addView(Ui.button(this, "مسح الأزرار المضبوطة والمتعلَّمة", Ui.BAD) {
             Prefs.layoutJson = ""
@@ -128,7 +128,7 @@ class MainActivity : Activity() {
         seekRow(c6, "حساسية الكشف", 10, 80, (Prefs.conf * 100).toInt(), { "$it%" }) { Prefs.conf = it / 100f }
         seekRow(c6, "قوة التصويب", 10, 100, (Prefs.aimGain * 100).toInt(), { "$it%" }) { Prefs.aimGain = it / 100f }
         seekRow(c6, "عدد أنوية المعالج للنموذج", 1, 8, Prefs.threads, { "$it" }) { Prefs.threads = it }
-        seekRow(c6, "أقصى عدد صور في الثانية (أقل = حرارة أقل واللعبة أسلس)", 5, 25, Prefs.maxFps, { "$it" }) { Prefs.maxFps = it }
+        seekRow(c6, "أقصى عدد صور في الثانية (30 = من غير سقف)", 5, 25, Prefs.maxFps, { "$it" }) { Prefs.maxFps = it }
         switchRow(c6, "عكس اتجاه التصويب الرأسي", Prefs.invertY) { Prefs.invertY = it }
         switchRow(c6, "زر خفض الصوت = إيقاف طوارئ", Prefs.volStop) { Prefs.volStop = it }
         switchRow(c6, "رسم مربعات الكشف فوق اللعبة (للتجربة فقط)", Prefs.debugBoxes) { Prefs.debugBoxes = it }

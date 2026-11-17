@@ -25,6 +25,7 @@ class Overlay(
         const val IDLE = 0
         const val RUN = 1
         const val WAIT = 2
+        const val REC = 3
     }
 
     private val wm = ctx.getSystemService(Context.WINDOW_SERVICE) as WindowManager
@@ -101,6 +102,7 @@ class Overlay(
             p.color = when (state) {
                 RUN -> Color.parseColor("#22C55E")
                 WAIT -> Color.parseColor("#F59E0B")
+                REC -> Color.parseColor("#EF4444")
                 else -> Color.parseColor("#7C5CFF")
             }
             c.drawCircle(cx, cy, d / 2f, p)
@@ -120,6 +122,8 @@ class Overlay(
                 path.lineTo(cx - s * 0.7f, cy + s)
                 path.close()
                 c.drawPath(path, p)
+            } else if (state == REC) {
+                c.drawCircle(cx, cy, d * 0.22f, p)
             } else {
                 c.drawCircle(cx, cy, d * 0.12f, p)
             }
