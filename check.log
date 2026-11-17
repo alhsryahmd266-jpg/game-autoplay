@@ -1,0 +1,11 @@
+2026-11-17 02:07:45.748726: I tensorflow/core/platform/cpu_feature_guard.cc:210] This TensorFlow binary is optimized to use available CPU instructions in performance-critical operations.
+To enable the following instructions: AVX2 FMA, in other operations, rebuild TensorFlow with the appropriate compiler flags.
+tensorflow 2.16.2
+INFO: Created TensorFlow Lite XNNPACK delegate for CPU.
+OK   outall/yolo26n-coco-288x640-raw.tflite | in [1, 3, 288, 640] | out [1, 84, 3780] | classic head, anchors>0.3: 46 | max box value 0.98
+OK   outall/yolo26n-coco-288x640.tflite | in [1, 3, 288, 640] | out [1, 84, 3780] | classic head, anchors>0.3: 46 | max box value 0.98
+OK   outall/yolo26n-coco-640.tflite | in [1, 3, 640, 640] | out [1, 84, 8400] | classic head, anchors>0.3: 49 | max box value 0.99
+OK   outall/yolo26s-coco-288x640-raw.tflite | in [1, 3, 288, 640] | out [1, 84, 3780] | classic head, anchors>0.3: 49 | max box value 0.98
+OK   outall/yolo26s-coco-288x640.tflite | in [1, 3, 288, 640] | out [1, 84, 3780] | classic head, anchors>0.3: 49 | max box value 0.98
+OK   outall/yolo26s-coco-640.tflite | in [1, 3, 640, 640] | out [1, 84, 8400] | classic head, anchors>0.3: 53 | max box value 0.99
+RESULT: all files load and run on TF 2.16
