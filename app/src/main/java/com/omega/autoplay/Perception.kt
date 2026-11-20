@@ -154,7 +154,8 @@ class Perception(private val layout: Layout) {
             self.finish()
         }
         val dets = if (calibrating) allDets else allDets.filter { !((it.role == Role.ENEMY || it.role == Role.ENEMY_HEAD) && self.isSelf(it)) }
-        val enemies = dets.filter { it.role == Role.ENEMY }
+        // drop impossible boxes (tiny specks, absurd aspect ratios): they are false positives, not enemies
+        val enemies = dets.filter { it.role == Role.ENEMY && it.h > 0.02f && it.w > 0.006f && it.h / max(it.w, 0.001f) < 8f && it.w / max(it.h, 0.001f) < 4f }
         val heads = dets.filter { it.role == Role.ENEMY_HEAD }
         val allies = dets.filter { it.role == Role.ALLY }
         val loot = dets.filter { it.role == Role.LOOT }

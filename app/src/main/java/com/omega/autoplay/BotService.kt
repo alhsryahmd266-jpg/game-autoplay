@@ -306,7 +306,18 @@ class BotService : Service() {
             starting = false
             status = "شغّال (" + b.name + ")"
             overlay?.setState(Overlay.RUN)
-            Thread({ loop(cap) }, "ap-loop").start()
+            Thread({
+                while (runFlag) {
+                    try {
+                        loop(cap)
+                        break
+                    } catch (t: Throwable) {
+                        AppLog.d("loop died: " + t.javaClass.simpleName + " " + t.message + " (restarting)")
+                        try { controller.apply(Command()) } catch (_: Throwable) { }
+                        try { Thread.sleep(300) } catch (_: InterruptedException) { }
+                    }
+                }
+            }, "ap-loop").start()
         }.start()
     }
 
@@ -323,14 +334,75 @@ class BotService : Service() {
         AppLog.d("stopped")
     }
 
+    private fun reloadModel() {
+        Thread {
+            try {
+                val (y, info) = ModelStore.build(this)
+                if (y != null) {
+                    val oldY = yolo
+                    yolo = y
+                    perception.hudKnown = y.hasHudClasses()
+                    try { Thread.sleep(400) } catch (_: InterruptedException) { }
+                    try { oldY?.close() } catch (_: Throwable) { }
+                    AppLog.d("model reloaded: " + info.msg)
+                } else {
+                    AppLog.d("model reload failed: " + info.msg)
+                }
+            } catch (t: Throwable) {
+                AppLog.d("reload: " + t.message)
+            }
+        }.start()
+    }
+
+    /**
+     * Main loop with freeze protection:
+     *  - no frames for 0.7s  -> every held input is released (never keeps running / firing blind)
+     *  - no frames for 4s    -> the capture is re-attached (repeated every 8s)
+     *  - repeated exceptions -> inputs released and the detector is rebuilt
+     *  - frames come back    -> tracking state is reset (it is stale)
+     */
     private fun loop(cap: ScreenCapture) {
         Process.setThreadPriority(5)
         var frames = 0
         var t0 = SystemClock.uptimeMillis()
         var lastRot = 0L
+        var lastFrameAt = t0
+        var stall = 0
+        var lastRefresh = 0L
+        var errRun = 0
+        var lastReload = 0L
         while (runFlag) {
-            val f = cap.awaitFrame(300) ?: continue
-            val tStart = SystemClock.uptimeMillis()
+            val f = cap.awaitFrame(300)
+            val now = SystemClock.uptimeMillis()
+            if (f == null) {
+                val gap = now - lastFrameAt
+                if (gap > 700L && stall < 1) {
+                    stall = 1
+                    try { controller.apply(Command().also { it.status = "الشاشة متجمدة" }) } catch (_: Throwable) { }
+                    brain.onFreeze(now)
+                    AppLog.d("no frames for " + gap + "ms: inputs released")
+                }
+                if (gap > 4000L && now - lastRefresh > 8000L) {
+                    lastRefresh = now
+                    stall = 2
+                    AppLog.d("no frames for " + gap + "ms: re-attaching the capture")
+                    cap.refresh()
+                    controller.setScreen(cap.realW, cap.realH)
+                }
+                if (gap > 30000L && stall < 3) {
+                    stall = 3
+                    toast("الشاشة/اللعبة متجمدة من 30 ثانية. هفضل أحاول")
+                }
+                if (gap > 700L) overlay?.setInfo("متجمد " + (gap / 1000) + "s")
+                continue
+            }
+            if (stall != 0) {
+                AppLog.d("frames are back after " + (now - lastFrameAt) + "ms")
+                stall = 0
+                brain.onResume(now)
+            }
+            lastFrameAt = now
+            val tStart = now
             try {
                 if (tStart - lastRot > 700) {
                     lastRot = tStart
@@ -342,6 +414,7 @@ class BotService : Service() {
                 val c = brain.decide(w, cap.realW, cap.realH)
                 controller.apply(c)
                 debugView?.dets = dets
+                errRun = 0
                 frames++
                 if (tStart - t0 >= 1000) {
                     val st = if (controller.paused) "اللعبة مش قدامك" else c.status
@@ -352,7 +425,16 @@ class BotService : Service() {
                     t0 = tStart
                 }
             } catch (e: Throwable) {
-                AppLog.d("loop: " + e.javaClass.simpleName + " " + e.message)
+                errRun++
+                AppLog.d("loop: " + e.javaClass.simpleName + " " + e.message + " (x" + errRun + ")")
+                if (errRun >= 6) {
+                    try { controller.apply(Command()) } catch (_: Throwable) { }
+                    if (tStart - lastReload > 20000L) {
+                        lastReload = tStart
+                        AppLog.d("too many errors: rebuilding the detector")
+                        reloadModel()
+                    }
+                }
                 try { Thread.sleep(60) } catch (_: InterruptedException) { }
             }
             // frame pacing: optional cap set by the user (default 30 = effectively uncapped)

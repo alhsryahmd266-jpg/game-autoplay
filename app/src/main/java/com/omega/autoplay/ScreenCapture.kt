@@ -106,6 +106,18 @@ class ScreenCapture(
 
     fun last(): Frame? = frame
 
+    val lastFrameAt: Long get() = frame?.t ?: 0L
+
+    /** Re-attach the mirror to a fresh reader (used when frames stop arriving). */
+    fun refresh() {
+        try {
+            build()
+            if (active) vd?.surface = reader?.surface
+        } catch (e: Exception) {
+            AppLog.d("capture refresh failed: " + e.message)
+        }
+    }
+
     private fun onImage(ir: ImageReader) {
         val img = try { ir.acquireLatestImage() } catch (e: Exception) { null } ?: return
         try {

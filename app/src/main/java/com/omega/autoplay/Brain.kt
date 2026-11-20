@@ -61,6 +61,15 @@ class Brain(private val layout: Layout) {
     private var lootSince = 0L
     private var ignoreLootUntil = 0L
 
+    // freeze / hit reaction / menu flow
+    private var identSince = 0L
+    private var lastHp = -1f
+    private var tookHitAt = 0L
+    private var hitDir = 1f
+    private var noHudSince = 0L
+    private var fbIdx = 0
+    private var lastFallback = 0L
+
     // aim calibration
     private val probes = arrayOf(intArrayOf(0, 1), intArrayOf(0, -1), intArrayOf(1, 1), intArrayOf(1, -1), intArrayOf(0, 1), intArrayOf(0, -1))
     private var calStart = 0L
@@ -83,10 +92,24 @@ class Brain(private val layout: Layout) {
 
     @Volatile var lookGapMs = 130L
 
+    /** Frames stopped arriving: forget what we tracked (it is stale). */
+    fun onFreeze(t: Long) {
+        fireUntil = 0L
+        burstGapUntil = 0L
+    }
+
+    fun onResume(t: Long) {
+        trks.clear(); curId = -1; lastTrackT = 0L
+        lowMotionSince = 0L; identSince = 0L
+        fireUntil = 0L; burstGapUntil = 0L
+        lastLook = t
+    }
+
     fun reset(t: Long) {
         lastTick = 0L; lastEnemyAt = 0L; hadEnemy = false; lowMotionSince = 0L; unstickUntil = 0L
         fireUntil = 0L; burstGapUntil = 0L; firedMs = 0L; lootSince = 0L; ignoreLootUntil = 0L
         trks.clear(); curId = -1; lastTrackT = 0L
+        identSince = 0L; lastHp = -1f; tookHitAt = 0L; noHudSince = 0L; fbIdx = 0; lastFallback = 0L
         nextTurn = t + 2500
         calStart = t; calStep = 0; calPhase = 0; calF0 = null; calDone = false
         calAmpX = 30f; calAmpY = 20f
@@ -228,7 +251,7 @@ class Brain(private val layout: Layout) {
         for (tr in trks) {
             if (tr.seenT != w.t || tr.det == null) continue
             val d = hypot((tr.x - w.cross.x) * 2f, tr.y - w.cross.y)
-            var s = d - tr.conf * 0.2f
+            var s = d - tr.conf * 0.2f - min(tr.h, 0.4f) * 0.35f
             if (tr.id == curId) s -= 0.15f
             if (s < bs) {
                 bs = s
@@ -285,11 +308,40 @@ class Brain(private val layout: Layout) {
 
         if (!w.hudVisible) {
             c.status = "قائمة / موت"
+            if (noHudSince == 0L) noHudSince = t
             val m = w.menu
-            if (m != null && t - lastMenu > 1500) {
+            if (m != null) {
+                if (t - lastMenu > 1500) {
+                    c.taps.add(PointF(m.cx, m.cy))
+                    lastMenu = t
+                }
+            } else if (Prefs.menuFallback && t - noHudSince > 9000L && t - lastFallback > 2200L) {
+                // no known button on screen for a long time (lobby / loading / result): probe typical spots
+                val p = FALLBACK[fbIdx % FALLBACK.size]
+                fbIdx++
+                lastFallback = t
+                c.taps.add(PointF(p[0], p[1]))
+                AppLog.d("menu fallback tap " + p[0] + "," + p[1])
+            }
+            trks.clear(); curId = -1; fireUntil = 0L
+            return c
+        }
+        noHudSince = 0L
+
+        // frames keep arriving but the picture is identical: game hung / loading / paused. Wait, do not act blindly.
+        if (w.motion < 0.05f) {
+            if (identSince == 0L) identSince = t
+        } else {
+            identSince = 0L
+        }
+        if (identSince != 0L && t - identSince > 2500L) {
+            c.status = "اللعبة ثابتة/متجمدة: بستنى"
+            val m = w.menu
+            if (m != null && t - lastMenu > 2000) {
                 c.taps.add(PointF(m.cx, m.cy))
                 lastMenu = t
             }
+            fireUntil = 0L; trks.clear(); curId = -1; lowMotionSince = 0L
             return c
         }
 
@@ -297,6 +349,15 @@ class Brain(private val layout: Layout) {
         val tr = pickTrack(w)
         val hp = w.health
         val weak = (hp != null && hp < (if (style == 0) 0.45f else 0.3f)) || w.lowHealth
+        if (hp != null) {
+            val base = if (lastHp < 0f) hp else lastHp
+            if (hp < base - 0.06f) {
+                tookHitAt = t
+                hitDir = if (rnd.nextBoolean()) 1f else -1f
+            }
+            lastHp = if (lastHp < 0f) hp else base * 0.7f + hp * 0.3f
+        }
+        val hitRecent = tookHitAt != 0L && t - tookHitAt < 1600L
 
         if (tr != null) {
             c.status = "قتال"
@@ -318,7 +379,8 @@ class Brain(private val layout: Layout) {
             val bh = tr.h * sh
             val aligned = abs(exNow) < max(0.03f * sw, 0.35f * bw) && abs(eyNow) < max(0.05f * sh, 0.30f * bh)
             val allyInLine = w.allies.any { w.cross.x >= it.x1 && w.cross.x <= it.x2 && w.cross.y >= it.y1 && w.cross.y <= it.y2 }
-            if (aligned && !allyInLine && tr.conf >= Prefs.conf && t >= burstGapUntil && t >= fireUntil) {
+            val solid = tr.hits >= 2 || tr.conf >= 0.55f
+            if (aligned && !allyInLine && solid && tr.conf >= Prefs.conf && t >= burstGapUntil && t >= fireUntil) {
                 fireUntil = t + 420 + rnd.nextInt(300)
                 burstGapUntil = fireUntil + 110 + rnd.nextInt(120)
             }
@@ -331,6 +393,8 @@ class Brain(private val layout: Layout) {
             var fwd = 0f
             if (far) fwd = 0.9f else if (tr.h < near) fwd = 0.45f else if (tr.h > 0.45f) fwd = -0.7f
             if (weak) fwd = -0.8f
+            val crowd = trks.count { it.seenT == t && it.det != null }
+            if (crowd >= 3 && fwd > -0.3f) fwd = -0.3f
             var mvx = strafe * 0.85f
             if (aligned && tr.h < 0.14f && !weak) {
                 mvx = 0f
@@ -341,6 +405,15 @@ class Brain(private val layout: Layout) {
             if (!weak && layout.has(Role.JUMP) && t - lastJump > 2400 + rnd.nextInt(2600)) {
                 c.tap(layout.get(Role.JUMP))
                 lastJump = t
+            }
+            if (weak && !aligned && tr.h < 0.2f && layout.has(Role.HEAL) && t - lastHeal > 7000) {
+                c.tap(layout.get(Role.HEAL))
+                lastHeal = t
+            }
+            if (firedMs > 4500 && !aligned && layout.has(Role.RELOAD) && t - lastReload > 5000) {
+                c.tap(layout.get(Role.RELOAD))
+                lastReload = t
+                firedMs = 0
             }
         } else {
             curId = -1
@@ -396,6 +469,19 @@ class Brain(private val layout: Layout) {
                         lastLook = t
                     }
                     c.moveY = 1f
+                }
+            } else if (hitRecent) {
+                // took damage and nobody is visible: the shooter is somewhere around us: spin and move off the line of fire
+                c.status = "رد على إصابة"
+                c.moveX = hitDir * 0.8f
+                c.moveY = 0.2f
+                if (canLook) {
+                    c.lookDx = yawRight(hitDir * 0.11f * sw).coerceIn(-maxStep, maxStep)
+                    lastLook = t
+                }
+                if (layout.has(Role.JUMP) && t - lastJump > 1800) {
+                    c.tap(layout.get(Role.JUMP))
+                    lastJump = t
                 }
             } else if (loot != null) {
                 c.status = "غنيمة"
@@ -456,5 +542,11 @@ class Brain(private val layout: Layout) {
     companion object {
         /** seconds the shot is led by: camera + gesture + detection latency */
         const val LEAD = 0.20f
+
+        /** typical "continue / play again / close" spots (normalized), probed when the HUD is gone for a long time */
+        val FALLBACK = arrayOf(
+            floatArrayOf(0.50f, 0.50f), floatArrayOf(0.50f, 0.82f), floatArrayOf(0.86f, 0.86f),
+            floatArrayOf(0.50f, 0.66f), floatArrayOf(0.93f, 0.08f)
+        )
     }
 }

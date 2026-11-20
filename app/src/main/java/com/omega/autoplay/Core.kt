@@ -128,6 +128,9 @@ object Prefs {
     var lastNames: String
         get() = str("names", "")
         set(v) = putS("names", v)
+    var menuFallback: Boolean
+        get() = sp.getBoolean("menuFb", true)
+        set(v) = putB("menuFb", v)
     var shellPaired: Boolean
         get() = sp.getBoolean("shellPaired", false)
         set(v) = putB("shellPaired", v)

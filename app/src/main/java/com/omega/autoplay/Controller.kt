@@ -45,6 +45,7 @@ class Controller(private val layout: Layout, private val ownPkg: String) {
     private var tapActive = false
     private var tapUntil = 0L
     private var lastFg = 0L
+    @Volatile private var lastApply = 0L
 
     val backendName: String get() = backend?.name ?: "-"
     val periodMs: Long get() = if (backend?.name == "Shell") 16L else 45L
@@ -58,6 +59,7 @@ class Controller(private val layout: Layout, private val ownPkg: String) {
         joyDown = false; fireDown = false; lookActive = false; tapActive = false
         pendLook = false
         tapQ.clear()
+        lastApply = SystemClock.uptimeMillis()
         run = true
         th = Thread({ loop() }, "ap-controller").also { it.start() }
     }
@@ -78,6 +80,7 @@ class Controller(private val layout: Layout, private val ownPkg: String) {
     }
 
     fun apply(c: Command) {
+        lastApply = SystemClock.uptimeMillis()
         mx = c.moveX
         my = c.moveY
         fire = c.fire
@@ -131,6 +134,12 @@ class Controller(private val layout: Layout, private val ownPkg: String) {
             return
         }
         paused = false
+        // dead-man switch: if the brain stopped sending commands (frozen frames, slow model, hung loop), never keep
+        // running / firing blindly on the last command
+        if (now - lastApply > 600L) {
+            mx = 0f; my = 0f; fire = false
+            synchronized(lookLock) { pendLook = false }
+        }
         val w = sw.toFloat()
         val h = sh.toFloat()
 
