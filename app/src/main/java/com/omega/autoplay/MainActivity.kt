@@ -37,6 +37,7 @@ class MainActivity : Activity() {
     private lateinit var tvModel: TextView
     private lateinit var tvRun: TextView
     private lateinit var tvLog: TextView
+    private lateinit var tvRec: TextView
     private var resumed = false
     private val ticker = object : Runnable {
         override fun run() {
@@ -161,6 +162,25 @@ class MainActivity : Activity() {
             AppLog.clear()
             refresh()
         })
+
+        val c9 = section("٩) تسجيل فريم")
+        c9.addView(Ui.text(this, "أداة منفصلة تمامًا عن البوت: تسجّل شاشة لعبتك، تصنّف تلقائيًا أي شخص/عربية/طيارة فيها، وتلمّ كل حاجة في ملف ZIP واحد جاهز لـ Kaggle أو Roboflow.", 12f, Ui.SUB))
+        tvRec = Ui.text(this, "", 13f, Ui.SUB); c9.addView(tvRec)
+        c9.addView(Ui.button(this, "إظهار زر تسجيل فريم", Ui.ACC) {
+            if (!Settings.canDrawOverlays(this)) { toast("اسمح بالظهور فوق التطبيقات الأول"); return@button }
+            if (RecService.instance != null) { toast("الزر ظاهر بالفعل"); return@button }
+            startActivity(Intent(this, RecCaptureActivity::class.java))
+            toast("وافق على التقاط الشاشة، وهيظهر زر صغير عايم")
+        })
+        c9.addView(Ui.button(this, "إخفاء الأداة", Ui.BAD) {
+            if (RecService.instance != null) {
+                startService(Intent(this, RecService::class.java).setAction(RecService.ACT_STOP))
+            } else {
+                toast("مش شغّالة")
+            }
+        })
+        seekRow(c9, "عدد اللقطات المحفوظة في الثانية", 1, 10, Prefs.recSaveRate, { "$it" }) { Prefs.recSaveRate = it }
+        c9.addView(Ui.text(this, "زر الأداة: دوسة = تشغيل/إيقاف التسجيل (تقدر تسجّل كذا مرة قبل التحويل). ضغطة طويلة = تحويل كل اللي اتسجّل لملف واحد في التنزيلات ← TasjeelFrame.", 12f, Ui.SUB))
         refresh()
     }
 
@@ -248,6 +268,10 @@ class MainActivity : Activity() {
         tvModel.text = modelText()
         tvRun.text = "الحالة: " + BotService.status + (if (BotService.instance != null) "" else "  (الخدمة مقفولة)")
         tvLog.text = AppLog.dump().lines().takeLast(40).joinToString("\n")
+        if (::tvRec.isInitialized) {
+            tvRec.text = "الحالة: " + RecService.status + " — " + RecorderPaths.count(this) + " لقطة في الدفعة الحالية" +
+                (if (RecService.instance == null) "  (الأداة مقفولة)" else "")
+        }
     }
 
     private fun startPairing() {

@@ -134,4 +134,15 @@ object Prefs {
     var shellPaired: Boolean
         get() = sp.getBoolean("shellPaired", false)
         set(v) = putB("shellPaired", v)
+
+    // --- تسجيل فريم (standalone recorder tool; independent of the fields above) ---
+    var recSaveRate: Int
+        get() = sp.getInt("recSaveRate", 3)
+        set(v) = putI("recSaveRate", v)
+    var recOvX: Int
+        get() = sp.getInt("recOvX", 24)
+        set(v) = putI("recOvX", v)
+    var recOvY: Int
+        get() = sp.getInt("recOvY", 320)
+        set(v) = putI("recOvY", v)
 }
