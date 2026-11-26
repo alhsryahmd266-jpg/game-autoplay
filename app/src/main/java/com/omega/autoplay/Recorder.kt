@@ -303,9 +303,9 @@ data.yaml   صيغة Roboflow/YOLO القياسية لأسماء الكلاسا�
 
 private val SYNC_SCRIPT = """
 #!/usr/bin/env python3
-"""Merge frames.jsonl + touches.jsonl into one CSV: each frame row gets the nearest touch sample(s)
-and, when two samples bracket it, the instantaneous drag vector (dx, dy) in 0..1 screen fractions.
-Usage: python sync_frames_touches.py  (run inside the unzipped folder)"""
+# Merges frames.jsonl + touches.jsonl into one CSV: each frame row gets the nearest touch sample(s)
+# and, when two samples bracket it, the instantaneous drag vector (dx, dy) in 0..1 screen fractions.
+# Usage: python sync_frames_touches.py  (run inside the unzipped folder)
 import json, csv, bisect
 
 def load(name):
