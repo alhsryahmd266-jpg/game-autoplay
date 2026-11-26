@@ -156,8 +156,9 @@ class Recorder(private val ctx: Context) {
      * Call for every captured frame while recording; saves it to the staging folder if the save-rate allows.
      * Timestamps use SystemClock.uptimeMillis() (monotonic, excludes deep sleep) to match the clock basis
      * getevent normally reports, so frames and the optional touch log can be correlated afterwards.
+     * [touches], when given, draws a small dot at each active touch and a thin arrow for its recent direction.
      */
-    fun maybeSave(f: Frame, savesPerSec: Int): Boolean {
+    fun maybeSave(f: Frame, savesPerSec: Int, touches: List<FloatArray> = emptyList()): Boolean {
         val now = SystemClock.uptimeMillis()
         val minGap = 1000L / max(1, savesPerSec)
         if (now - lastSaveAt < minGap) return false
@@ -165,6 +166,7 @@ class Recorder(private val ctx: Context) {
         try {
             val bmp = Bitmap.createBitmap(f.w, f.h, Bitmap.Config.ARGB_8888)
             bmp.copyPixelsFromBuffer(ByteBuffer.wrap(f.px))
+            if (touches.isNotEmpty()) drawTouches(bmp, touches)
             val name = "f_${now}_${(0..999).random()}.jpg"
             val file = File(RecorderPaths.images(ctx), name)
             file.outputStream().use { bmp.compress(Bitmap.CompressFormat.JPEG, 90, it) }
@@ -180,6 +182,52 @@ class Recorder(private val ctx: Context) {
         } catch (t: Throwable) {
             AppLog.d("تسجيل فريم: فشل حفظ لقطة: " + t.message)
             return false
+        }
+    }
+
+    /** Draws one small dot + a thin direction arrow per active touch, straight onto the saved bitmap's pixels. */
+    private fun drawTouches(bmp: Bitmap, touches: List<FloatArray>) {
+        val c = android.graphics.Canvas(bmp)
+        val w = bmp.width.toFloat(); val h = bmp.height.toFloat()
+        val diag = kotlin.math.hypot(w, h)
+        val stroke = (diag * 0.004f).coerceIn(2f, 7f)
+        val dot = (diag * 0.010f).coerceIn(5f, 16f)
+        val glow = android.graphics.Paint(android.graphics.Paint.ANTI_ALIAS_FLAG).apply {
+            style = android.graphics.Paint.Style.STROKE
+            strokeWidth = stroke + 3f
+            color = android.graphics.Color.BLACK
+            alpha = 160
+            strokeCap = android.graphics.Paint.Cap.ROUND
+        }
+        val line = android.graphics.Paint(android.graphics.Paint.ANTI_ALIAS_FLAG).apply {
+            style = android.graphics.Paint.Style.STROKE
+            strokeWidth = stroke
+            color = android.graphics.Color.parseColor("#00E5FF")
+            strokeCap = android.graphics.Paint.Cap.ROUND
+        }
+        val fillGlow = android.graphics.Paint(android.graphics.Paint.ANTI_ALIAS_FLAG).apply { color = android.graphics.Color.BLACK; alpha = 160 }
+        val fill = android.graphics.Paint(android.graphics.Paint.ANTI_ALIAS_FLAG).apply { color = android.graphics.Color.parseColor("#00E5FF") }
+        for (t in touches) {
+            if (t.size < 4) continue
+            val cx = t[0] * w; val cy = t[1] * h
+            val px = t[2] * w; val py = t[3] * h
+            c.drawCircle(cx, cy, dot + 2f, fillGlow)
+            c.drawCircle(cx, cy, dot, fill)
+            val mdx = cx - px; val mdy = cy - py
+            if (kotlin.math.hypot(mdx, mdy) > diag * 0.006f) {
+                // arrow points in the direction of travel, drawn a bit ahead of the current point
+                val ex = cx + mdx; val ey = cy + mdy
+                c.drawLine(cx, cy, ex, ey, glow)
+                c.drawLine(cx, cy, ex, ey, line)
+                val ang = kotlin.math.atan2(mdy, mdx)
+                val hs = dot * 1.3f
+                val a1 = ang + Math.PI * 0.8
+                val a2 = ang - Math.PI * 0.8
+                val p1x = ex + (hs * kotlin.math.cos(a1)).toFloat(); val p1y = ey + (hs * kotlin.math.sin(a1)).toFloat()
+                val p2x = ex + (hs * kotlin.math.cos(a2)).toFloat(); val p2y = ey + (hs * kotlin.math.sin(a2)).toFloat()
+                c.drawLine(ex, ey, p1x, p1y, line)
+                c.drawLine(ex, ey, p2x, p2y, line)
+            }
         }
     }
 

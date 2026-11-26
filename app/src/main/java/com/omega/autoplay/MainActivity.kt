@@ -180,6 +180,7 @@ class MainActivity : Activity() {
             }
         })
         seekRow(c9, "عدد اللقطات المحفوظة في الثانية", 1, 10, Prefs.recSaveRate, { "$it" }) { Prefs.recSaveRate = it }
+        switchRow(c9, "ارسم نقطة اللمس وسهم اتجاهها على اللقطات (لو عايزها نضيفة للتصنيف، اقفلها)", Prefs.recDrawTouches) { Prefs.recDrawTouches = it }
         c9.addView(Ui.text(this, "زر الأداة: دوسة = تشغيل/إيقاف التسجيل (تقدر تسجّل كذا مرة قبل التحويل). ضغطة طويلة = تحويل كل اللي اتسجّل لملف واحد في التنزيلات ← TasjeelFrame.", 12f, Ui.SUB))
         refresh()
     }

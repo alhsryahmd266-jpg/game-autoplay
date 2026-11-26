@@ -24,6 +24,12 @@ class RecTouchLogger(private val ctx: Context) {
     @Volatile var active = false
         private set
 
+    /** One entry per currently-down finger: [curX, curY, prevX, prevY] (0..1 of screen). Thread-safe snapshot. */
+    @Synchronized
+    fun snapshot(): List<FloatArray> = liveSlots.values.map { it.copyOf() }
+
+    private val liveSlots = java.util.concurrent.ConcurrentHashMap<Int, FloatArray>()
+
     private val devHeader = Pattern.compile("add device \\d+:\\s*(/dev/input/event\\d+)")
     private val minMax = Pattern.compile("min\\s+(-?\\d+),\\s*max\\s+(-?\\d+)")
     private val evAbs = Pattern.compile("EV_ABS\\s+ABS_MT_(SLOT|TRACKING_ID|POSITION_X|POSITION_Y)\\s+([0-9a-fA-F]+)")
@@ -120,6 +126,14 @@ class RecTouchLogger(private val ctx: Context) {
         AppLog.d("تسجيل فريم: تسجيل اللمس شغّال على $dev")
         val slotPos = HashMap<Int, FloatArray>()
         val slotDown = HashMap<Int, Boolean>()
+
+        fun updateLive() {
+            val m = HashMap<Int, FloatArray>()
+            for ((sId, down) in slotDown) {
+                if (down) slotPos[sId]?.let { m[sId] = it.copyOf() }
+            }
+            synchronized(this@RecTouchLogger) { liveSlots.keys.retainAll(m.keys); liveSlots.putAll(m) }
+        }
         var slot = 0
         val writer = outFile.bufferedWriter()
         try {
@@ -140,6 +154,7 @@ class RecTouchLogger(private val ctx: Context) {
                         writer.write(sb.toString())
                         writer.flush()
                     }
+                    updateLive()
                     continue
                 }
                 val am = evAbs.matcher(line)
@@ -151,12 +166,15 @@ class RecTouchLogger(private val ctx: Context) {
                         "TRACKING_ID" -> slotDown[slot] = v != 0xFFFFFFFFL
                         "POSITION_X" -> {
                             val nx = ((v - rx.min).toFloat() / max(1, rx.max - rx.min)).coerceIn(0f, 1f)
-                            val cur = slotPos.getOrPut(slot) { floatArrayOf(0f, 0f) }
+                            // [cur, prevStillHere] layout: [curX, curY, prevX, prevY] — shift cur->prev only on real moves
+                            val cur = slotPos.getOrPut(slot) { floatArrayOf(nx, 0f, nx, 0f) }
+                            cur[2] = cur[0]
                             cur[0] = nx
                         }
                         "POSITION_Y" -> {
                             val ny = ((v - ry.min).toFloat() / max(1, ry.max - ry.min)).coerceIn(0f, 1f)
-                            val cur = slotPos.getOrPut(slot) { floatArrayOf(0f, 0f) }
+                            val cur = slotPos.getOrPut(slot) { floatArrayOf(0f, ny, 0f, ny) }
+                            cur[3] = cur[1]
                             cur[1] = ny
                         }
                     }

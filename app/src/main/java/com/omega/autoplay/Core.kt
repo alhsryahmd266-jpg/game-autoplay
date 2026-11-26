@@ -145,4 +145,7 @@ object Prefs {
     var recOvY: Int
         get() = sp.getInt("recOvY", 320)
         set(v) = putI("recOvY", v)
+    var recDrawTouches: Boolean
+        get() = sp.getBoolean("recDrawTouches", true)
+        set(v) = putB("recDrawTouches", v)
 }

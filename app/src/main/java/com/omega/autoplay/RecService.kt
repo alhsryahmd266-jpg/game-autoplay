@@ -137,7 +137,8 @@ class RecService : Service() {
             Process.setThreadPriority(5)
             while (recording) {
                 val f = cap.awaitFrame(300) ?: continue
-                if (recorder.maybeSave(f, save)) {
+                val touchSnap = if (Prefs.recDrawTouches) (touchLogger?.snapshot() ?: emptyList()) else emptyList()
+                if (recorder.maybeSave(f, save, touchSnap)) {
                     val n = RecorderPaths.count(this)
                     overlay?.setCount(n)
                 }
